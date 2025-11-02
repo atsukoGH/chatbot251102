@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 
-# Show title and description.
 st.title("💬 Chatbot (Gemini API版)")
 st.write(
     "このチャットボットはGoogle Gemini API（Generative Language API）を使用して応答を生成します。"
@@ -9,40 +8,32 @@ st.write(
     "元のOpenAI版のチュートリアルは[こちら](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)です。"
 )
 
-# Ask user for their Gemini API key via `st.text_input`.
 gemini_api_key = st.text_input("Gemini API Key", type="password")
 if not gemini_api_key:
     st.info("APIキーを入力してください。", icon="🗝️")
 else:
-    # Gemini API endpoint
-    GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+    # 最新エンドポイント (v1)
+    GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
 
-    # Create a session state variable to store the chat messages.
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display the existing chat messages.
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Create a chat input field.
     if prompt := st.chat_input("何か話しかけてみてください！"):
-        # Store and display the current prompt.
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Gemini API expects dialog history as a list of message dicts.
+        # Gemini API expects dialog history as a list of message dicts in the form {"role": "...", "parts": [{"text": "..."}]}
         gemini_history = []
         for m in st.session_state.messages:
             # Gemini API: role is "user" or "model"
-            if m["role"] == "user":
-                gemini_history.append({"role": "user", "parts": [m["content"]]})
-            else:
-                gemini_history.append({"role": "model", "parts": [m["content"]]})
+            role = "user" if m["role"] == "user" else "model"
+            gemini_history.append({"role": role, "parts": [{"text": m["content"]}]})
 
-        # Prepare the API payload.
         payload = {
             "contents": gemini_history
         }
@@ -53,20 +44,17 @@ else:
             "key": gemini_api_key
         }
 
-        # Call the Gemini API.
         try:
             response = requests.post(GEMINI_API_URL, headers=headers, params=params, json=payload, timeout=30)
             response.raise_for_status()
             data = response.json()
 
-            # Extract the model's reply.
             model_reply = ""
             if "candidates" in data and len(data["candidates"]) > 0:
                 candidate = data["candidates"][0]
                 if "content" in candidate:
                     parts = candidate["content"].get("parts", [])
                     if parts:
-                        # partsは配列で、各要素は{"text": ...}形式
                         model_reply = parts[0].get("text", "")
             else:
                 model_reply = "エラー: Geminiから有効な応答が返されませんでした。"
@@ -74,7 +62,6 @@ else:
         except Exception as e:
             model_reply = f"エラーが発生しました: {e}"
 
-        # Stream the response and store it.
         with st.chat_message("assistant"):
             st.markdown(model_reply)
         st.session_state.messages.append({"role": "assistant", "content": model_reply})
