@@ -1,17 +1,14 @@
 import streamlit as st
 import google.generativeai as genai
 
-# 追加: ファイル読み取り用ライブラリ
 import io
 import PyPDF2
 import docx
 
 st.title("💬 Chatbot (Gemini 2.5 Pro + ファイル質問対応)")
 st.write(
-    "このチャットボットはGoogle Gemini 2.5 Pro APIを使って返答します。テキスト・PDF・Wordファイルをアップロードすると、５行程度で要約します"
+    "このチャットボットはGoogle Gemini 2.5 Pro APIを使って返答します。テキスト・PDF・Wordファイルをアップロードすると、論文形式の場合は研究の背景・目的（10行程度）、結論（5行程度）を要約します。それ以外は5行程度で要約します。"
 )
-# Streamlit Community CloudのSecretsからAPIキーを取得
-# .streamlit/secrets.toml に GEMINI_API_KEY = "YOUR_API_KEY" を設定してください
 gemini_api_key = st.secrets.get("GEMINI_API_KEY")
 
 uploaded_file = st.file_uploader(
@@ -20,7 +17,6 @@ uploaded_file = st.file_uploader(
 )
 
 def extract_text_from_file(uploaded_file):
-    """アップロードファイルからテキストを抽出。対応: txt, pdf, docx"""
     if uploaded_file is None:
         return None
     name = uploaded_file.name.lower()
@@ -52,6 +48,14 @@ def extract_text_from_file(uploaded_file):
         st.error("未対応のファイル形式です。")
         return None
 
+def is_likely_academic_paper(text):
+    """簡易的に論文形式かどうか判定する（タイトルやセクション名、参考文献、abstractなどの有無をチェック）"""
+    keywords = [
+        "abstract", "introduction", "目的", "背景", "方法", "results", "考察", "discussion", "conclusion", "結論", "references", "参考文献"
+    ]
+    count = sum(k.lower() in text.lower() for k in keywords)
+    return count >= 3
+
 if not gemini_api_key:
     st.info("続行するにはGemini APIキーをsecretsに設定してください。", icon="🗝️")
 else:
@@ -68,17 +72,27 @@ else:
         file_content = extract_text_from_file(uploaded_file)
         st.session_state.file_content = file_content or ""
         if file_content:
-            # Geminiで要約
             try:
                 model = genai.GenerativeModel("gemini-2.5-pro")
-                summary_prompt = (
-                    "次のテキストを5行程度の日本語で簡潔に要約してください：\n\n" + file_content
-                )
+                if is_likely_academic_paper(file_content):
+                    summary_prompt = (
+                        "次のテキストが研究論文や論文形式の場合は、\n"
+                        "・研究の背景や目的について10行程度でまとめてください。\n"
+                        "・結論について5行程度でまとめてください。\n"
+                        "【テキスト】\n" + file_content
+                    )
+                else:
+                    summary_prompt = (
+                        "次のテキストを5行程度の日本語で簡潔に要約してください：\n\n" + file_content
+                    )
                 response = model.generate_content(summary_prompt)
                 summary = response.text.strip()
                 st.session_state.file_summary = summary
                 st.success("ファイルをアップロードしました！")
-                st.markdown("#### ファイル内容の要約（約5行）")
+                if is_likely_academic_paper(file_content):
+                    st.markdown("#### 研究論文の要点まとめ")
+                else:
+                    st.markdown("#### ファイル内容の要約（約5行）")
                 st.markdown(summary)
             except Exception as e:
                 st.session_state.file_summary = f"要約中にエラーが発生しました: {e}"
@@ -98,7 +112,6 @@ else:
 
     prompt = st.chat_input("ご用件を入力してください")
     if prompt:
-        # ファイル内容があればプロンプトに含める
         context = ""
         if st.session_state.file_content:
             context += f"【参考ファイル内容】\n{st.session_state.file_content}\n\n"
