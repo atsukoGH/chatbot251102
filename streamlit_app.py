@@ -6,6 +6,9 @@ st.write(
     "このチャットボットはGoogle Gemini 2.5 Pro APIを使って返答します。"
     "APIキーは[こちら](https://aistudio.google.com/app/apikey)で取得できます。"
 )
+# Streamlit Community CloudのSecretsからAPIキーを取得
+# .streamlit/secrets.toml に GEMINI_API_KEY = "YOUR_API_KEY" を設定してください
+gemini_api_key = st.secrets.get("GEMINI_API_KEY")
 
 gemini_api_key = st.text_input("Gemini API Key", type="password")
 uploaded_file = st.file_uploader("質問したいファイルをアップロードしてください（テキストのみ対応）", type=["txt"])
