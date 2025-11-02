@@ -36,9 +36,10 @@ else:
         # Gemini API expects dialog history as a list of message dicts.
         gemini_history = []
         for m in st.session_state.messages:
+            # Gemini API: role is "user" or "model"
             if m["role"] == "user":
                 gemini_history.append({"role": "user", "parts": [m["content"]]})
-            elif m["role"] == "assistant":
+            else:
                 gemini_history.append({"role": "model", "parts": [m["content"]]})
 
         # Prepare the API payload.
@@ -61,9 +62,12 @@ else:
             # Extract the model's reply.
             model_reply = ""
             if "candidates" in data and len(data["candidates"]) > 0:
-                parts = data["candidates"][0].get("content", {}).get("parts", [])
-                if parts:
-                    model_reply = parts[0].get("text", "")
+                candidate = data["candidates"][0]
+                if "content" in candidate:
+                    parts = candidate["content"].get("parts", [])
+                    if parts:
+                        # partsは配列で、各要素は{"text": ...}形式
+                        model_reply = parts[0].get("text", "")
             else:
                 model_reply = "エラー: Geminiから有効な応答が返されませんでした。"
 
