@@ -1,56 +1,76 @@
 import streamlit as st
-from openai import OpenAI
+import requests
 
 # Show title and description.
-st.title("💬 Chatbot")
+st.title("💬 Chatbot (Gemini API版)")
 st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+    "このチャットボットはGoogle Gemini API（Generative Language API）を使用して応答を生成します。"
+    "利用するには、Google Gemini APIキーが必要です。APIキーは[こちら](https://makersuite.google.com/app/apikey)から取得できます。"
+    "元のOpenAI版のチュートリアルは[こちら](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)です。"
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
+# Ask user for their Gemini API key via `st.text_input`.
+gemini_api_key = st.text_input("Gemini API Key", type="password")
+if not gemini_api_key:
+    st.info("APIキーを入力してください。", icon="🗝️")
 else:
+    # Gemini API endpoint
+    GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
-
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
+    # Create a session state variable to store the chat messages.
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display the existing chat messages via `st.chat_message`.
+    # Display the existing chat messages.
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
-
+    # Create a chat input field.
+    if prompt := st.chat_input("何か話しかけてみてください！"):
         # Store and display the current prompt.
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+        # Gemini API expects dialog history as a list of message dicts.
+        gemini_history = []
+        for m in st.session_state.messages:
+            if m["role"] == "user":
+                gemini_history.append({"role": "user", "parts": [m["content"]]})
+            elif m["role"] == "assistant":
+                gemini_history.append({"role": "model", "parts": [m["content"]]})
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
+        # Prepare the API payload.
+        payload = {
+            "contents": gemini_history
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        params = {
+            "key": gemini_api_key
+        }
+
+        # Call the Gemini API.
+        try:
+            response = requests.post(GEMINI_API_URL, headers=headers, params=params, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract the model's reply.
+            model_reply = ""
+            if "candidates" in data and len(data["candidates"]) > 0:
+                parts = data["candidates"][0].get("content", {}).get("parts", [])
+                if parts:
+                    model_reply = parts[0].get("text", "")
+            else:
+                model_reply = "エラー: Geminiから有効な応答が返されませんでした。"
+
+        except Exception as e:
+            model_reply = f"エラーが発生しました: {e}"
+
+        # Stream the response and store it.
         with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            st.markdown(model_reply)
+        st.session_state.messages.append({"role": "assistant", "content": model_reply})
