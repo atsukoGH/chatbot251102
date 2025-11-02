@@ -1,15 +1,56 @@
 import streamlit as st
 import google.generativeai as genai
 
+# 追加: ファイル読み取り用ライブラリ
+import io
+import PyPDF2
+import docx
+
 st.title("💬 Chatbot (Gemini 2.5 Pro + ファイル質問対応)")
 st.write(
-    "このチャットボットはGoogle Gemini 2.5 Pro APIを使って返答します。テキストファイルをアップロードすると、５行程度で要約します"
+    "このチャットボットはGoogle Gemini 2.5 Pro APIを使って返答します。テキスト・PDF・Wordファイルをアップロードすると、５行程度で要約します"
 )
 # Streamlit Community CloudのSecretsからAPIキーを取得
 # .streamlit/secrets.toml に GEMINI_API_KEY = "YOUR_API_KEY" を設定してください
 gemini_api_key = st.secrets.get("GEMINI_API_KEY")
 
-uploaded_file = st.file_uploader("質問したいファイルをアップロードしてください（テキストのみ対応）", type=["txt"])
+uploaded_file = st.file_uploader(
+    "質問したいファイルをアップロードしてください（txt/pdf/docx対応）",
+    type=["txt", "pdf", "docx"]
+)
+
+def extract_text_from_file(uploaded_file):
+    """アップロードファイルからテキストを抽出。対応: txt, pdf, docx"""
+    if uploaded_file is None:
+        return None
+    name = uploaded_file.name.lower()
+    if name.endswith(".txt"):
+        try:
+            return uploaded_file.read().decode("utf-8")
+        except Exception:
+            uploaded_file.seek(0)
+            return uploaded_file.read().decode("shift-jis", errors="ignore")
+    elif name.endswith(".pdf"):
+        try:
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text() or ""
+            return text
+        except Exception as e:
+            st.error(f"PDFの読み取りでエラー: {e}")
+            return None
+    elif name.endswith(".docx"):
+        try:
+            doc = docx.Document(uploaded_file)
+            text = "\n".join([para.text for para in doc.paragraphs])
+            return text
+        except Exception as e:
+            st.error(f"Wordファイルの読み取りでエラー: {e}")
+            return None
+    else:
+        st.error("未対応のファイル形式です。")
+        return None
 
 if not gemini_api_key:
     st.info("続行するにはGemini APIキーをsecretsに設定してください。", icon="🗝️")
@@ -24,23 +65,26 @@ else:
         st.session_state.file_summary = ""
 
     if uploaded_file is not None:
-        file_content = uploaded_file.read().decode("utf-8")
-        st.session_state.file_content = file_content
-
-        # Geminiで要約
-        try:
-            model = genai.GenerativeModel("gemini-2.5-pro")
-            summary_prompt = (
-                "次のテキストを5行程度の日本語で簡潔に要約してください：\n\n" + file_content
-            )
-            response = model.generate_content(summary_prompt)
-            summary = response.text.strip()
-            st.session_state.file_summary = summary
-            st.success("ファイルをアップロードしました！")
-            st.markdown("#### ファイル内容の要約（約5行）")
-            st.markdown(summary)
-        except Exception as e:
-            st.session_state.file_summary = f"要約中にエラーが発生しました: {e}"
+        file_content = extract_text_from_file(uploaded_file)
+        st.session_state.file_content = file_content or ""
+        if file_content:
+            # Geminiで要約
+            try:
+                model = genai.GenerativeModel("gemini-2.5-pro")
+                summary_prompt = (
+                    "次のテキストを5行程度の日本語で簡潔に要約してください：\n\n" + file_content
+                )
+                response = model.generate_content(summary_prompt)
+                summary = response.text.strip()
+                st.session_state.file_summary = summary
+                st.success("ファイルをアップロードしました！")
+                st.markdown("#### ファイル内容の要約（約5行）")
+                st.markdown(summary)
+            except Exception as e:
+                st.session_state.file_summary = f"要約中にエラーが発生しました: {e}"
+                st.error(st.session_state.file_summary)
+        else:
+            st.session_state.file_summary = "ファイルからテキストを抽出できませんでした。"
             st.error(st.session_state.file_summary)
 
     def convert_role(role):
