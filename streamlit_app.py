@@ -19,11 +19,28 @@ else:
         st.session_state.messages = []
     if "file_content" not in st.session_state:
         st.session_state.file_content = ""
+    if "file_summary" not in st.session_state:
+        st.session_state.file_summary = ""
 
     if uploaded_file is not None:
         file_content = uploaded_file.read().decode("utf-8")
         st.session_state.file_content = file_content
-        st.success("ファイルをアップロードしました！")
+
+        # Geminiで要約
+        try:
+            model = genai.GenerativeModel("gemini-2.5-pro")
+            summary_prompt = (
+                "次のテキストを5行程度の日本語で簡潔に要約してください：\n\n" + file_content
+            )
+            response = model.generate_content(summary_prompt)
+            summary = response.text.strip()
+            st.session_state.file_summary = summary
+            st.success("ファイルをアップロードしました！")
+            st.markdown("#### ファイル内容の要約（約5行）")
+            st.markdown(summary)
+        except Exception as e:
+            st.session_state.file_summary = f"要約中にエラーが発生しました: {e}"
+            st.error(st.session_state.file_summary)
 
     def convert_role(role):
         if role == "assistant":
