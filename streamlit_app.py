@@ -10,11 +10,10 @@ st.write(
 # .streamlit/secrets.toml に GEMINI_API_KEY = "YOUR_API_KEY" を設定してください
 gemini_api_key = st.secrets.get("GEMINI_API_KEY")
 
-gemini_api_key = st.text_input("Gemini API Key", type="password")
 uploaded_file = st.file_uploader("質問したいファイルをアップロードしてください（テキストのみ対応）", type=["txt"])
 
 if not gemini_api_key:
-    st.info("続行するにはGemini APIキーを入力してください。", icon="🗝️")
+    st.info("続行するにはGemini APIキーをsecretsに設定してください。", icon="🗝️")
 else:
     genai.configure(api_key=gemini_api_key)
 
