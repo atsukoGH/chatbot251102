@@ -12,8 +12,8 @@ gemini_api_key = st.text_input("Gemini API Key", type="password")
 if not gemini_api_key:
     st.info("APIキーを入力してください。", icon="🗝️")
 else:
-    # 最新エンドポイント (v1)
-    GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
+    # 最新エンドポイント (2025年11月現在)
+    GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
